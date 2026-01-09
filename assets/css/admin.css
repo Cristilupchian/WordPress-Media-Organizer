@@ -1,0 +1,56 @@
+.mfo-admin-panel {
+	display: flex;
+	gap: 32px;
+	align-items: flex-start;
+}
+
+.mfo-admin-form {
+	max-width: 320px;
+}
+
+.mfo-admin-form label {
+	display: block;
+	margin-top: 12px;
+	font-weight: 600;
+}
+
+.mfo-admin-form input,
+.mfo-admin-form select {
+	width: 100%;
+	margin-top: 4px;
+}
+
+.mfo-admin-form button {
+	margin-top: 12px;
+}
+
+.mfo-admin-list {
+	flex: 1;
+}
+
+.mfo-folder-list {
+	list-style: none;
+	padding-left: 16px;
+}
+
+.mfo-folder-item {
+	margin-bottom: 8px;
+}
+
+.mfo-folder-label {
+	font-weight: 600;
+}
+
+.mfo-folder-actions {
+	margin-left: 12px;
+	display: inline-flex;
+	gap: 6px;
+}
+
+.mfo-message {
+	margin-top: 12px;
+}
+
+.mfo-message.error {
+	color: #b32d2e;
+}
