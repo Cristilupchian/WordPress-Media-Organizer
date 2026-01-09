@@ -14,6 +14,9 @@ class MFO_Admin {
 		add_action( 'pre_get_posts', array( __CLASS__, 'filter_list_view_query' ) );
 		add_action( 'add_meta_boxes_attachment', array( __CLASS__, 'register_metabox' ) );
 		add_action( 'save_post_attachment', array( __CLASS__, 'save_attachment_folder' ) );
+		add_filter( 'bulk_actions-upload', array( __CLASS__, 'register_bulk_action' ) );
+		add_filter( 'handle_bulk_actions-upload', array( __CLASS__, 'handle_bulk_action' ), 10, 3 );
+		add_action( 'admin_notices', array( __CLASS__, 'render_bulk_notice' ) );
 	}
 
 	public static function register_menu() {
@@ -111,6 +114,17 @@ class MFO_Admin {
 				$label = str_repeat( '— ', $depth ) . $term->name;
 				?>
 				<option value="<?php echo esc_attr( $term->term_id ); ?>" <?php selected( $selected, (string) $term->term_id ); ?>><?php echo esc_html( $label ); ?></option>
+			<?php endforeach; ?>
+		</select>
+		<select name="mfo_bulk_folder" id="mfo_bulk_folder" class="postform">
+			<option value="-1"><?php esc_html_e( 'Move selected to…', 'media-folders-organizer' ); ?></option>
+			<option value="0"><?php esc_html_e( 'Uncategorized', 'media-folders-organizer' ); ?></option>
+			<?php foreach ( $terms as $term ) : ?>
+				<?php
+				$depth = count( get_ancestors( $term->term_id, MFO_Helpers::TAXONOMY ) );
+				$label = str_repeat( '— ', $depth ) . $term->name;
+				?>
+				<option value="<?php echo esc_attr( $term->term_id ); ?>"><?php echo esc_html( $label ); ?></option>
 			<?php endforeach; ?>
 		</select>
 		<?php
@@ -215,6 +229,91 @@ class MFO_Admin {
 			wp_set_object_terms( $post_id, array( $folder_id ), MFO_Helpers::TAXONOMY, false );
 		} else {
 			wp_set_object_terms( $post_id, array(), MFO_Helpers::TAXONOMY, false );
+		}
+	}
+
+	public static function register_bulk_action( $actions ) {
+		$actions['mfo_assign_folder'] = __( 'Move to folder', 'media-folders-organizer' );
+		return $actions;
+	}
+
+	public static function handle_bulk_action( $redirect_url, $action, $post_ids ) {
+		if ( 'mfo_assign_folder' !== $action ) {
+			return $redirect_url;
+		}
+
+		if ( ! current_user_can( 'upload_files' ) ) {
+			return add_query_arg( 'mfo_bulk_result', 'forbidden', $redirect_url );
+		}
+
+		check_admin_referer( 'bulk-media' );
+
+		$folder_raw = isset( $_REQUEST['mfo_bulk_folder'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['mfo_bulk_folder'] ) ) : '-1';
+		$folder_id  = (int) $folder_raw;
+
+		if ( -1 === $folder_id ) {
+			return add_query_arg( 'mfo_bulk_result', 'missing', $redirect_url );
+		}
+
+		if ( $folder_id > 0 ) {
+			$term = get_term( $folder_id, MFO_Helpers::TAXONOMY );
+			if ( ! $term || is_wp_error( $term ) ) {
+				return add_query_arg( 'mfo_bulk_result', 'invalid', $redirect_url );
+			}
+		}
+
+		$updated = 0;
+		foreach ( $post_ids as $post_id ) {
+			$post_id = (int) $post_id;
+			if ( ! current_user_can( 'upload_files', $post_id ) ) {
+				continue;
+			}
+			if ( $folder_id > 0 ) {
+				wp_set_object_terms( $post_id, array( $folder_id ), MFO_Helpers::TAXONOMY, false );
+			} else {
+				wp_set_object_terms( $post_id, array(), MFO_Helpers::TAXONOMY, false );
+			}
+			$updated++;
+		}
+
+		return add_query_arg(
+			array(
+				'mfo_bulk_result' => 'success',
+				'mfo_bulk_count'  => $updated,
+			),
+			$redirect_url
+		);
+	}
+
+	public static function render_bulk_notice() {
+		if ( ! isset( $_GET['mfo_bulk_result'] ) ) {
+			return;
+		}
+
+		$result = sanitize_text_field( wp_unslash( $_GET['mfo_bulk_result'] ) );
+		if ( 'success' === $result ) {
+			$count = isset( $_GET['mfo_bulk_count'] ) ? (int) $_GET['mfo_bulk_count'] : 0;
+			printf(
+				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+				esc_html( sprintf( _n( '%d item moved to folder.', '%d items moved to folder.', $count, 'media-folders-organizer' ), $count ) )
+			);
+			return;
+		}
+
+		$message = '';
+		if ( 'missing' === $result ) {
+			$message = __( 'Select a folder to move items.', 'media-folders-organizer' );
+		} elseif ( 'invalid' === $result ) {
+			$message = __( 'Selected folder is invalid.', 'media-folders-organizer' );
+		} elseif ( 'forbidden' === $result ) {
+			$message = __( 'You do not have permission to move these items.', 'media-folders-organizer' );
+		}
+
+		if ( '' !== $message ) {
+			printf(
+				'<div class="notice notice-error is-dismissible"><p>%s</p></div>',
+				esc_html( $message )
+			);
 		}
 	}
 }
